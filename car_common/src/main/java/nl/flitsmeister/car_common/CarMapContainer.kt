@@ -3,17 +3,15 @@ package nl.flitsmeister.car_common
 import android.animation.Animator
 import android.animation.ValueAnimator
 import android.graphics.Paint
-import android.graphics.PixelFormat
 import android.graphics.PointF
-import android.util.Log
+import android.view.Gravity
 import android.view.View
-import android.view.WindowManager
+import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
+import android.widget.FrameLayout
+import android.widget.TextView
+import androidx.annotation.MainThread
 import androidx.car.app.CarContext
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import nl.flitsmeister.car_common.extentions.runOnMainThread
 import nl.flitsmeister.car_common.extentions.windowManager
 import org.maplibre.android.MapLibre
 import org.maplibre.android.constants.MapLibreConstants
@@ -24,20 +22,13 @@ import org.maplibre.android.maps.Style
 import kotlin.math.ln
 
 class CarMapContainer(
-    private val carContext: CarContext, lifecycle: Lifecycle
-) : DefaultLifecycleObserver {
-
-    init {
-        lifecycle.addObserver(this)
-    }
+    private val carContext: CarContext
+) {
 
     var mapViewInstance: MapView? = null
         private set
 
     var mapLibreMapInstance: MapLibreMap? = null
-
-    var surfaceWidth: Int? = null
-    var surfaceHeight: Int? = null
 
     private var scaleAnimator: Animator? = null
 
@@ -109,72 +100,60 @@ class CarMapContainer(
         }
     }
 
-    /**
-     * This function is called when the surface is created, to update the mapview with the surface sizes
-     */
-    fun setSurfaceSize(surfaceWidth: Int, surfaceHeight: Int) {
-        Log.v(LOG_TAG, "setSurfaceSize: $surfaceWidth, $surfaceHeight")
-        if (this.surfaceWidth != surfaceWidth || this.surfaceHeight != surfaceHeight) {
-            this.surfaceWidth = surfaceWidth
-            this.surfaceHeight = surfaceHeight
-            mapViewInstance?.apply {
-                carContext.windowManager.updateViewLayout(this, getWindowManagerLayoutParams())
-            }
-        }
-    }
-
-    override fun onCreate(owner: LifecycleOwner) {
+    @MainThread
+    fun setupMap(): View {
         MapLibre.getInstance(carContext)
 
-        runOnMainThread {
-            mapViewInstance = createMapViewInstance().apply {
-                // Add the mapView to a window using the windowManager. This is needed for the mapView to start rendering.
-                // The mapView is not actually shown on any screen, but acts as though it is visible.
-                carContext.windowManager.addView(
-                    this,
-                    getWindowManagerLayoutParams()
+        val mapView = createMapViewInstance().apply {
+            onStart()
+            getMapAsync {
+                mapViewInstance = this
+                mapLibreMapInstance = it
+                it.setStyle(
+                    //TODO: Set your own style here
+                    Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")
                 )
-                onStart()
-                getMapAsync {
-                    mapViewInstance = this
-                    mapLibreMapInstance = it
-                    it.setStyle(
-                        //TODO: Set your own style here
-                        Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")
-                    )
-                }
             }
         }
+        mapViewInstance = mapView
+
+        // if we just need the map and nothing drawn above it, we can just return `mapView` directly
+        // since we want to draw, let's layer the attribution on top of it.
+        val attribution = TextView(carContext).apply {
+            setText(R.string.copyright_openstreetmap)
+            setTextColor(carContext.getColor(R.color.osm_attribution))
+        }
+
+        val frameLayout = FrameLayout(carContext)
+        frameLayout.addView(
+            mapView,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        frameLayout.addView(
+            attribution, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END
+            )
+        )
+
+        return frameLayout
     }
 
-    private fun getWindowManagerLayoutParams() = WindowManager.LayoutParams(
-        surfaceWidth ?: WindowManager.LayoutParams.MATCH_PARENT,
-        surfaceHeight ?: WindowManager.LayoutParams.MATCH_PARENT,
-        WindowManager.LayoutParams.TYPE_PRIVATE_PRESENTATION,
-        WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-        PixelFormat.RGBX_8888
-    )
+    @MainThread
+    fun cleanUpMap() {
+        mapLibreMapInstance = null
 
-    override fun onDestroy(owner: LifecycleOwner) {
-        runOnMainThread {
-            mapLibreMapInstance = null
-
-            mapViewInstance?.run {
-                onStop()
-                onDestroy()
-                carContext.windowManager.removeView(this)
-            }
-            mapViewInstance = null
+        mapViewInstance?.run {
+            onStop()
+            onDestroy()
+            carContext.windowManager.removeView(this)
         }
+        mapViewInstance = null
     }
 
     private fun createMapViewInstance() =
-        MapView(carContext, MapLibreMapOptions.createFromAttributes(carContext).apply {
-            // Set the textureMode to true, so a TextureView is created
-            // We can extract this TextureView to draw on the Android Auto surface
-            textureMode(true)
-
-        }).apply {
+        MapView(carContext, MapLibreMapOptions.createFromAttributes(carContext)).apply {
             setLayerType(View.LAYER_TYPE_HARDWARE, Paint())
         }
 
