@@ -24,7 +24,7 @@ object GameMapLocation {
 
     /** Call after style load and after permission changes. MapView owns engine start/stop. */
     @SuppressLint("MissingPermission")
-    fun enable(context: Context, map: MapLibreMap, recenter: Boolean = false): Boolean {
+    fun enable(context: Context, map: MapLibreMap, recenter: Boolean = false, useDefaultLocationEngine: Boolean = true): Boolean {
         val component = map.locationComponent
         if (!hasPermission(context)) {
             if (component.isLocationComponentActivated) {
@@ -51,7 +51,7 @@ object GameMapLocation {
                                 .setPriority(LocationEngineRequest.PRIORITY_HIGH_ACCURACY)
                                 .build()
                         )
-                        .useDefaultLocationEngine(true)
+                        .useDefaultLocationEngine(useDefaultLocationEngine)
                         .build()
                 )
             }
@@ -61,7 +61,11 @@ object GameMapLocation {
             if (!wasEnabled || recenter) {
                 // GPS course avoids compass jitter in a car. Stay top-down like a minimap.
                 component.setCameraMode(
-                    CameraMode.TRACKING_GPS, 750L, 16.0, null, 0.0,
+                    // An emulator's stationary fix typically has no bearing. Follow position first;
+                    // the car listener switches to GPS course tracking when a bearing arrives.
+                    if (component.lastKnownLocation?.hasBearing() == true)
+                        CameraMode.TRACKING_GPS else CameraMode.TRACKING,
+                    750L, 16.0, null, 0.0,
                     object : OnLocationCameraTransitionListener {
                         override fun onLocationCameraTransitionFinished(cameraMode: Int) {
                             // The SDK skips transition zoom without a fix, or if already tracking.

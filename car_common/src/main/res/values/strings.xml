@@ -6,6 +6,8 @@
     <string name="location_channel">Car location</string>
     <string name="car_location_active">Location is active on the car display</string>
     <string name="open_phone_for_location">Open GameMaps on the phone, then tap Recenter again.</string>
+    <string name="waiting_for_gps">Waiting for GPS location. Set a position in the emulator and retry.</string>
+    <string name="location_service_unavailable">Location service could not start. Check Logcat for GameMaps.</string>
     <string name="location_permission_needed">Allow location access to follow your position. You can still browse the map.</string>
     <string name="aaos_no_location_permission_desc">No permission, please enable in settings</string>
     <string name="aa_no_location_permission_desc">No permission, please enable on phone</string>

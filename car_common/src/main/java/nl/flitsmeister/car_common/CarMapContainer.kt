@@ -1,6 +1,13 @@
 package nl.flitsmeister.car_common
 
 import android.animation.Animator
+import android.annotation.SuppressLint
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.os.Bundle
+import android.os.Looper
+import android.util.Log
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Color
@@ -20,6 +27,7 @@ import org.maplibre.android.constants.MapLibreConstants
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
+import org.maplibre.android.location.modes.CameraMode
 import kotlin.math.ln
 
 class CarMapContainer(
@@ -35,6 +43,9 @@ class CarMapContainer(
     private var scaleAnimator: Animator? = null
     private var started = false
     private var resumed = false
+    private var systemLocationManager: LocationManager? = null
+    private var systemLocationListener: LocationListener? = null
+    private var lastLocationFix: Location? = null
 
 
     fun scrollBy(x: Float, y: Float) {
@@ -169,6 +180,7 @@ class CarMapContainer(
     }
 
     fun stopMap() {
+        stopSystemLocationUpdates()
         pauseMap()
         if (started) mapViewInstance?.onStop()
         started = false
@@ -183,10 +195,92 @@ class CarMapContainer(
             return
         }
         if (startLocationForeground()) {
-            GameMapLocation.enable(carContext, map, recenter)
-        } else if (recenter) {
-            CarToast.makeText(carContext, R.string.open_phone_for_location, CarToast.LENGTH_LONG).show()
+            // Use Android's native providers on the car rather than MapLibre's fused
+            // provider, which may have no last fix on Automotive emulators.
+            if (GameMapLocation.enable(carContext, map, recenter, useDefaultLocationEngine = false)) {
+                startSystemLocationUpdates(map)
+                if (recenter) {
+                    lastLocationFix?.let { map.locationComponent.forceLocationUpdate(it) }
+                    if (lastLocationFix == null) {
+                        CarToast.makeText(carContext, R.string.waiting_for_gps, CarToast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        } else {
+            Log.w(LOG_TAG, "Location foreground service could not start")
+            if (recenter) {
+                CarToast.makeText(carContext, R.string.location_service_unavailable, CarToast.LENGTH_LONG).show()
+            }
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startSystemLocationUpdates(map: MapLibreMap) {
+        if (systemLocationListener != null || !GameMapLocation.hasPermission(carContext)) return
+        val manager = carContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val listener = object : LocationListener {
+            override fun onLocationChanged(location: Location) {
+                if (!started || mapLibreMapInstance !== map) return
+                lastLocationFix = location
+                val component = map.locationComponent
+                if (component.isLocationComponentActivated && component.isLocationComponentEnabled) {
+                    component.forceLocationUpdate(location)
+                    // Keep manual pan mode intact, but use course-follow while driving.
+                    if (location.hasBearing() && component.cameraMode == CameraMode.TRACKING) {
+                        component.cameraMode = CameraMode.TRACKING_GPS
+                    }
+                }
+                Log.d(LOG_TAG, "GPS update from ${location.provider}; accuracy ${location.accuracy} m")
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
+            override fun onProviderEnabled(provider: String) = Unit
+            override fun onProviderDisabled(provider: String) {
+                Log.w(LOG_TAG, "Location provider disabled: $provider")
+            }
+        }
+        val providers = manager.getProviders(true).filter {
+            it == LocationManager.GPS_PROVIDER ||
+                it == LocationManager.NETWORK_PROVIDER ||
+                it == LocationManager.PASSIVE_PROVIDER ||
+                it == "fused"
+        }
+        var activeProviders = 0
+        for (provider in providers) {
+            try {
+                manager.requestLocationUpdates(provider, 1_000L, 0f, listener, Looper.getMainLooper())
+                activeProviders++
+            } catch (error: RuntimeException) {
+                Log.w(LOG_TAG, "Could not subscribe to location provider: $provider", error)
+            }
+        }
+        if (activeProviders == 0) {
+            Log.w(LOG_TAG, "No available Android location provider; check emulator location settings")
+            return
+        }
+        systemLocationManager = manager
+        systemLocationListener = listener
+        val cached = providers.mapNotNull { provider ->
+            try {
+                manager.getLastKnownLocation(provider)
+            } catch (error: SecurityException) {
+                Log.w(LOG_TAG, "Cannot read cached location from $provider", error)
+                null
+            }
+        }.maxByOrNull { it.time }
+        // A very old cached position must not appear as the user's current location.
+        cached?.takeIf { System.currentTimeMillis() - it.time in 0L..300_000L }
+            ?.let { listener.onLocationChanged(it) }
+    }
+
+    private fun stopSystemLocationUpdates() {
+        systemLocationListener?.let { listener ->
+            systemLocationManager?.removeUpdates(listener)
+        }
+        systemLocationListener = null
+        systemLocationManager = null
+        lastLocationFix = null
     }
 
     @MainThread

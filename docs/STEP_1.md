@@ -59,6 +59,27 @@ GameMaps sul telefono e premi Recenter sul display auto mentre l'app è visibile
 Non serve concedere il permesso posizione "sempre": questo step usa un foreground
 service di tipo location. Verifica questo percorso sulla tua versione Android.
 
+## GPS su emulatore Automotive
+
+La posizione deve provenire dal sistema: GameMaps non inventa coordinate.
+Il modulo auto ora ascolta i provider Android `gps`, `network`, `fused` e
+`passive`, inviando gli aggiornamenti ricevuti al puck MapLibre. Recenter
+mostra un messaggio se non è ancora disponibile un fix.
+
+- Accendi Location nelle impostazioni dell'emulatore, verifica i permessi dell'app
+  (utente Automotive) e imposta un punto in Extended Controls → Location.
+- Oppure, con **un solo emulatore connesso**: `adb emu geo fix 11.3426 44.4949`
+  (longitudine prima della latitudine). Non impostare coordinate fittizie nel codice.
+- Premi Recenter; nel Logcat filtra `CarMapContainer` e verifica
+  `GPS update from ...`. Se non appare, esegui `adb shell dumpsys location`
+  per controllare provider, utente e fix di sistema.
+- Il provider può fornire una posizione senza bearing quando è fermo: in quel
+  caso la camera segue la posizione senza ruotare, passando al course-follow
+  quando arrivano aggiornamenti con direzione.
+- I listener nativi si fermano con la sessione della mappa per evitare perdite.
+
+Questa modifica non è ancora stata validata su Android Studio o emulatore.
+
 ## Verifiche da eseguire
 
 | Scenario | Risultato atteso |
