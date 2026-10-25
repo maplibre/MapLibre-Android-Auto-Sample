@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">MapLibreCar</string>
-    <string name="copyright_openstreetmap">© OpenStreetMap</string>
+    <string name="app_name">GameMaps</string>
+    <string name="copyright_openstreetmap">OpenFreeMap · © OpenMapTiles · Data from OpenStreetMap</string>
+    <string name="recenter">Recenter</string>
+    <string name="location_channel">Car location</string>
+    <string name="car_location_active">Location is active on the car display</string>
+    <string name="open_phone_for_location">Open GameMaps on the phone, then tap Recenter again.</string>
+    <string name="location_permission_needed">Allow location access to follow your position. You can still browse the map.</string>
     <string name="aaos_no_location_permission_desc">No permission, please enable in settings</string>
     <string name="aa_no_location_permission_desc">No permission, please enable on phone</string>
     <string name="aaos_open_location_permission">Open location permission</string>

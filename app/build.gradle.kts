@@ -53,7 +53,6 @@ dependencies {
     implementation(project(":car_common"))
 
     implementation(libs.maplibre.sdk)
-    implementation(libs.maplibre.nav)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

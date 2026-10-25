@@ -2,7 +2,6 @@ package nl.flitsmeister.car_common.screens
 
 import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.util.Log
 import androidx.car.app.CarContext
 import androidx.car.app.CarToast
@@ -14,14 +13,25 @@ import androidx.car.app.model.CarIcon
 import androidx.car.app.model.MessageTemplate
 import androidx.car.app.model.ParkedOnlyOnClickListener
 import androidx.car.app.model.Template
-import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.IconCompat
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import nl.flitsmeister.car_common.GameMapLocation
+import nl.flitsmeister.car_common.extentions.screenManager
 import nl.flitsmeister.car_common.MyCarAppService
 import nl.flitsmeister.car_common.PhonePermissionActivity
 import nl.flitsmeister.car_common.R
 import java.util.concurrent.Executor
 
 class CarPermissionScreen(carContext: CarContext) : Screen(carContext) {
+    init {
+        lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onResume(owner: LifecycleOwner) {
+                if (GameMapLocation.hasPermission(carContext)) carContext.screenManager.popToRoot()
+            }
+        })
+    }
+
     override fun onGetTemplate(): Template {
         Log.v(LOG_TAG, "CarPermissionScreen.onGetTemplate")
         val message = if (MyCarAppService.appPlatform == "AAOS") {
@@ -77,6 +87,7 @@ class CarPermissionScreen(carContext: CarContext) : Screen(carContext) {
     private fun clickedFixPermissionAAOS() {
         //Ask for permissions
         val requiredPermissions = listOf(
+            Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_FINE_LOCATION
         )
         val myExecutor = Executor { command -> command?.run() }
@@ -85,7 +96,7 @@ class CarPermissionScreen(carContext: CarContext) : Screen(carContext) {
             myExecutor, //An Executor makes sure code is run on the correct thread.
         ) { approved, rejected ->
             Log.v("FM AAOS", "$approved $rejected")
-            if (approved.contains(Manifest.permission.ACCESS_FINE_LOCATION)) {
+            if (GameMapLocation.hasPermission(carContext)) {
                 //Granted
                 CarToast.makeText(
                     carContext,
@@ -96,7 +107,7 @@ class CarPermissionScreen(carContext: CarContext) : Screen(carContext) {
                 //Close this screen
                 val screenManager =
                     carContext.getCarService(CarContext.SCREEN_SERVICE) as ScreenManager
-                screenManager.popTo("ROOT")
+                screenManager.popToRoot()
             }
         }
     }
@@ -104,11 +115,7 @@ class CarPermissionScreen(carContext: CarContext) : Screen(carContext) {
     private fun clickedFixPermissionAA() {
         //If this function is called, you're standing still, Android Auto has already checked that.
         //Check if permission is already given
-        if (ContextCompat.checkSelfPermission(
-                carContext,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (!GameMapLocation.hasPermission(carContext)) {
             //Not granted
             //Open screen on phone
             val intent = Intent(carContext, PhonePermissionActivity::class.java)
@@ -138,7 +145,7 @@ class CarPermissionScreen(carContext: CarContext) : Screen(carContext) {
             //Close this screen
             val screenManager =
                 carContext.getCarService(CarContext.SCREEN_SERVICE) as ScreenManager
-            screenManager.popTo("ROOT")
+            screenManager.popToRoot()
         }
     }
 

@@ -4,8 +4,6 @@ import android.app.Presentation
 import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import androidx.car.app.CarContext
 import androidx.car.app.SurfaceCallback
@@ -17,17 +15,15 @@ import nl.flitsmeister.car_common.extentions.appManager
 
 class CarMapRenderer(
     private val carContext: CarContext,
-    serviceLifecycle: Lifecycle
+    private val serviceLifecycle: Lifecycle,
+    startLocationForeground: () -> Boolean
 ) : SurfaceCallback, DefaultLifecycleObserver, ICarMapRenderer {
 
     // The map container used to handle the map lifecycle
-    private val mapContainer = CarMapContainer(carContext)
+    private val mapContainer = CarMapContainer(carContext, startLocationForeground)
 
     // The surface to draw the map container on
     private var surfaceContainer: SurfaceContainer? = null
-
-    // Handler to post actions to the UI thread
-    private val uiHandler = Handler(Looper.getMainLooper())
 
     // The last known stable area
     private var lastKnownStableArea = Rect()
@@ -52,9 +48,7 @@ class CarMapRenderer(
 
     override fun onDestroy(owner: LifecycleOwner) {
         Log.v(LOG_TAG, "CarMapRenderer.onDestroy")
-        mapContainer.cleanUpMap()
-        surfaceContainer = null
-        uiHandler.removeCallbacksAndMessages(null)
+        releaseDisplay()
         try {
             carContext.appManager.setSurfaceCallback(null)
         } catch (e: Exception) {
@@ -62,13 +56,29 @@ class CarMapRenderer(
         }
     }
 
+    override fun onStart(owner: LifecycleOwner) = mapContainer.startMap()
+
+    override fun onResume(owner: LifecycleOwner) {
+        mapContainer.resumeMap()
+        refreshLocation()
+    }
+
+    override fun onPause(owner: LifecycleOwner) = mapContainer.pauseMap()
+
+    override fun onStop(owner: LifecycleOwner) = mapContainer.stopMap()
+
     override fun onSurfaceAvailable(surfaceContainer: SurfaceContainer) {
         Log.v(LOG_TAG, "CarMapRenderer.onSurfaceAvailable")
+        // A resize or reconnection can replace the surface without destroying the session.
+        releaseDisplay()
+        if (surfaceContainer.width <= 0 || surfaceContainer.height <= 0 ||
+            surfaceContainer.dpi <= 0 || surfaceContainer.surface?.isValid != true
+        ) return
         this.surfaceContainer = surfaceContainer
         val virtualDisplay = carContext
             .getSystemService(DisplayManager::class.java)
             .createVirtualDisplay(
-                "MapLibreSampleVirtualDisplay",
+                "GameMapsVirtualDisplay",
                 surfaceContainer.width,
                 surfaceContainer.height,
                 surfaceContainer.dpi,
@@ -76,8 +86,14 @@ class CarMapRenderer(
                 0
             ).also { this.virtualDisplay = it }
         val presentation = Presentation(carContext, virtualDisplay.display).also { this.presentation = it }
-        presentation.setContentView(mapContainer.setupMap())
+        presentation.setContentView(mapContainer.setupMap(presentation.context))
         presentation.show()
+        if (serviceLifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            mapContainer.startMap()
+        }
+        if (serviceLifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            mapContainer.resumeMap()
+        }
     }
 
     override fun onVisibleAreaChanged(visibleArea: Rect) {
@@ -103,9 +119,21 @@ class CarMapRenderer(
 
     override fun onSurfaceDestroyed(surfaceContainer: SurfaceContainer) {
         Log.v(LOG_TAG, "Surface destroyed")
-        this.surfaceContainer = null
-        uiHandler.removeCallbacksAndMessages(null)
+        if (this.surfaceContainer?.surface == surfaceContainer.surface) releaseDisplay()
     }
+
+    private fun releaseDisplay() {
+        mapContainer.cleanUpMap()
+        presentation?.dismiss()
+        presentation = null
+        virtualDisplay?.release()
+        virtualDisplay = null
+        surfaceContainer = null
+    }
+
+    fun refreshLocation() = mapContainer.refreshLocation()
+
+    fun recenter() = mapContainer.refreshLocation(recenter = true)
 
     override fun zoomInFromButton() {
         val centerX = surfaceContainer?.width?.toFloat()?.div(2) ?: -1f

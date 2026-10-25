@@ -2,6 +2,8 @@ package nl.flitsmeister.car_common
 
 import android.animation.Animator
 import android.animation.ValueAnimator
+import android.content.Context
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PointF
 import android.view.Gravity
@@ -12,17 +14,17 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.annotation.MainThread
 import androidx.car.app.CarContext
-import nl.flitsmeister.car_common.extentions.windowManager
+import androidx.car.app.CarToast
 import org.maplibre.android.MapLibre
 import org.maplibre.android.constants.MapLibreConstants
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
-import org.maplibre.android.maps.Style
 import kotlin.math.ln
 
 class CarMapContainer(
-    private val carContext: CarContext
+    private val carContext: CarContext,
+    private val startLocationForeground: () -> Boolean
 ) {
 
     var mapViewInstance: MapView? = null
@@ -31,6 +33,8 @@ class CarMapContainer(
     var mapLibreMapInstance: MapLibreMap? = null
 
     private var scaleAnimator: Animator? = null
+    private var started = false
+    private var resumed = false
 
 
     fun scrollBy(x: Float, y: Float) {
@@ -87,6 +91,7 @@ class CarMapContainer(
             doubleClickZoomWithAnimation(PointF(focusX, focusY), false)
             return
         }
+        if (!scaleFactor.isFinite() || scaleFactor <= 0f) return
         val currentZoomLevel = mapLibreMapInstance?.zoom
 
         // Calculate the additional zoom level based on the scale factor.
@@ -101,30 +106,32 @@ class CarMapContainer(
     }
 
     @MainThread
-    fun setupMap(): View {
-        MapLibre.getInstance(carContext)
+    fun setupMap(context: Context): View {
+        MapLibre.getInstance(context)
 
-        val mapView = createMapViewInstance().apply {
-            onStart()
-            getMapAsync {
-                mapViewInstance = this
-                mapLibreMapInstance = it
-                it.setStyle(
-                    //TODO: Set your own style here
-                    Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")
-                )
+        val mapView = createMapViewInstance(context)
+        mapViewInstance = mapView
+        mapView.onCreate(null)
+        mapView.getMapAsync { map ->
+            if (mapViewInstance !== mapView) return@getMapAsync
+            mapLibreMapInstance = map
+            // Car templates do not forward taps to the MapView attribution dialog.
+            map.uiSettings.isAttributionEnabled = false
+            map.setStyle(GameMapStyle.builder()) {
+                if (mapViewInstance === mapView && started) refreshLocation()
             }
         }
-        mapViewInstance = mapView
 
         // if we just need the map and nothing drawn above it, we can just return `mapView` directly
         // since we want to draw, let's layer the attribution on top of it.
-        val attribution = TextView(carContext).apply {
+        val attribution = TextView(context).apply {
             setText(R.string.copyright_openstreetmap)
-            setTextColor(carContext.getColor(R.color.osm_attribution))
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.argb(210, 23, 25, 28))
+            textSize = 10f
         }
 
-        val frameLayout = FrameLayout(carContext)
+        val frameLayout = FrameLayout(context)
         frameLayout.addView(
             mapView,
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -141,19 +148,62 @@ class CarMapContainer(
     }
 
     @MainThread
-    fun cleanUpMap() {
-        mapLibreMapInstance = null
-
-        mapViewInstance?.run {
-            onStop()
-            onDestroy()
-            carContext.windowManager.removeView(this)
+    fun startMap() {
+        if (!started && mapViewInstance != null) {
+            mapViewInstance?.onStart()
+            started = true
+            refreshLocation()
         }
+    }
+
+    fun resumeMap() {
+        if (!resumed && mapViewInstance != null) {
+            mapViewInstance?.onResume()
+            resumed = true
+        }
+    }
+
+    fun pauseMap() {
+        if (resumed) mapViewInstance?.onPause()
+        resumed = false
+    }
+
+    fun stopMap() {
+        pauseMap()
+        if (started) mapViewInstance?.onStop()
+        started = false
+    }
+
+    fun refreshLocation(recenter: Boolean = false) {
+        if (!started) return
+        val map = mapLibreMapInstance ?: return
+        if (map.style?.isFullyLoaded != true) return
+        if (!GameMapLocation.hasPermission(carContext)) {
+            GameMapLocation.enable(carContext, map)
+            return
+        }
+        if (startLocationForeground()) {
+            GameMapLocation.enable(carContext, map, recenter)
+        } else if (recenter) {
+            CarToast.makeText(carContext, R.string.open_phone_for_location, CarToast.LENGTH_LONG).show()
+        }
+    }
+
+    @MainThread
+    fun cleanUpMap() {
+        cancelCurrentAnimator(scaleAnimator)
+        scaleAnimator = null
+        stopMap()
+        mapLibreMapInstance = null
+        // The Presentation owns this view, not carContext.windowManager.
+        mapViewInstance?.onDestroy()
         mapViewInstance = null
     }
 
-    private fun createMapViewInstance() =
-        MapView(carContext, MapLibreMapOptions.createFromAttributes(carContext)).apply {
+    private fun createMapViewInstance(context: Context) =
+        MapView(context, MapLibreMapOptions.createFromAttributes(context).apply {
+            camera(GameMapStyle.initialCamera())
+        }).apply {
             setLayerType(View.LAYER_TYPE_HARDWARE, Paint())
         }
 

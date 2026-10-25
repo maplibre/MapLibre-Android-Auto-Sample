@@ -1,7 +1,6 @@
 package nl.flitsmeister.car_common.screens
 
 import androidx.car.app.CarContext
-import androidx.car.app.CarToast
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
@@ -9,6 +8,8 @@ import androidx.car.app.model.CarIcon
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.core.graphics.drawable.IconCompat
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import nl.flitsmeister.car_common.CarMapRenderer
 import nl.flitsmeister.car_common.R
 import nl.flitsmeister.car_common.extentions.addAction
@@ -21,6 +22,14 @@ class CarMapScreen(
     private val carContext: CarContext,
     private val carMapRenderer: CarMapRenderer
 ) : Screen(carContext) {
+
+    init {
+        lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onResume(owner: LifecycleOwner) {
+                carMapRenderer.refreshLocation()
+            }
+        })
+    }
 
     override fun onGetTemplate(): Template {
         val templateBuilder = NavigationTemplate.Builder()
@@ -37,9 +46,9 @@ class CarMapScreen(
         val actionStripBuilder = ActionStrip.Builder()
         actionStripBuilder.apply {
             addAction(Action.Builder().apply {
-                setTitle("Test")
+                setTitle(carContext.getString(R.string.recenter))
                 setOnClickListener {
-                    CarToast.makeText(carContext, "Test", CarToast.LENGTH_LONG).show()
+                    carMapRenderer.recenter()
                 }
             })
             addAction(Action.Builder().apply {

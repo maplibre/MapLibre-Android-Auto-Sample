@@ -12,7 +12,6 @@ appcompat = "1.7.0"
 material = "1.12.0"
 carApp = "1.4.0"
 mapLibreSdk = "11.7.0"
-mapLibreNav = "3.0.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -34,7 +33,6 @@ material = { group = "com.google.android.material", name = "material", version.r
 car-app = { group = "androidx.car.app", name = "app", version.ref = "carApp" }
 car-app-automotive = { group = "androidx.car.app", name = "app-automotive", version.ref = "carApp" }
 maplibre-sdk = { group = "org.maplibre.gl", name = "android-sdk", version.ref = "mapLibreSdk" }
-maplibre-nav = { group = "com.github.maplibre", name = "maplibre-navigation-android", version.ref = "mapLibreNav" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

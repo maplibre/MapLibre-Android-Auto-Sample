@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "nl.flitsmeister.car_common"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         minSdk = 29
@@ -36,7 +36,6 @@ dependencies {
     //Android Auto
     implementation(libs.car.app)
     implementation(libs.maplibre.sdk)
-    implementation(libs.maplibre.nav)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

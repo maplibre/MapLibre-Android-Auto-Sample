@@ -50,7 +50,6 @@ dependencies {
     implementation(project(":car_common"))
     implementation(libs.car.app.automotive)
     implementation(libs.maplibre.sdk)
-    implementation(libs.maplibre.nav)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

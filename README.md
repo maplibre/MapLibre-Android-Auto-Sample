@@ -1,172 +1,79 @@
-MapLibre Sample app for Android Auto and Automotive
-===================================================
+# GameMaps
 
-This sample app will demonstrate how to use MapLibre on Android Auto and Android Automotive.
-(Also known as AAOS, Android for Cars)
+Android map prototype with an original GTA-inspired minimap style, based on
+[MapLibre-Android-Auto-Sample](https://github.com/maplibre/MapLibre-Android-Auto-Sample).
 
-![](screenshots/screenshot1.png "Screenshot of MapLibre on Android Auto")
+The first implementation replaces the demo map on the phone and car with a shared,
+high-contrast street map, a GPS position arrow, course tracking and a Recenter action.
+It is a development prototype: routing, destination search, voice guidance, offline
+map downloads and Apple CarPlay are not implemented.
 
-So how does this work?
-----------------------
-Android Auto uses a Template system. It will not allow you to use regular views.
-MapLibre will provide the map as a View. If we want to use this MapView on Android Auto, we have to render it on the provided Surface.
-See also: https://developer.android.com/training/cars/apps#declare-surface-permission
+## Run it
 
-To get the MapView to render on the surface, we do the following;
-We render the MapView offscreen, create a 'screenshot' of this view. 
-And we'll draw this Bitmap to the Surface via a Canvas.
-Repeat the process 30 times per second, and you've got a working MapView on Android Auto.
+Open the project root in Android Studio. Use **JDK 17**, install **Android SDK 35**,
+sync Gradle, select the `app` configuration and run it on an Android 10+ phone.
+Allow location access (precise location is recommended for driving).
+The bundled style still needs internet access for map tiles and fonts.
 
-This process is not very efficient, but this is what we got to work with.
-Maybe in the future, we can find a solution to make MapLibre draw directly unto the Surface,
-and thereby skip the workaround. Which is drawing a Bitmap on a Canvas.
-
-
-How is the code structured?
----------------------------
-The map can be drawn on Android Auto, and Android Automotive. A lot of code (most of it), can be shared between the two.
-Therefore, this bulk of the code is in a shared module, called `car_common`. This is used by the `app` (Smartphone app, uses Android Auto) and the `automotive` module.
-The `automotive` module actually has no code at all, just some config and resources. Everything it uses comes from the `car_common` module.
-
-```mermaid
-flowchart TD
-    A[car_common] 
-    B[app]
-    C[automotive]
-    
-    B --> A
-    C --> A
+```sh
+./gradlew :app:assembleDebug :automotive:assembleDebug :car_common:testDebugUnitTest
+./gradlew :app:lintDebug :automotive:lintDebug :car_common:lintDebug
 ```
 
+On Windows use `gradlew.bat` in Command Prompt or `./gradlew.bat` in PowerShell.
+See [the first-step guide](docs/STEP_1.md) for Android Auto / DHU setup and checks.
 
-Enough words; Show me the code!
--------------------------------
+## Structure
 
-We have a class called `CarMapContainer`, which will take care of the MapView code;  
-This is to create the MapView, enable texture mode, and add to the WindowManager. 
-This is needed to ensure the MapView will render, and we can get the Texture later for rendering it onto the Canvas.
-```kotlin
-val mapView = MapView(carContext, MapLibreMapOptions.createFromAttributes(carContext).apply {
-    // Set the textureMode to true, so a TextureView is created
-    // We can extract this TextureView to draw on the Android Auto surface
-    textureMode(true)
-}).apply {
-    setLayerType(View.LAYER_TYPE_HARDWARE, Paint())
-}
-//(...)
-carContext.windowManager.addView(
-    mapView /* the MapView */,
-    getWindowManagerLayoutParams()
-)
-```
+| Module / file | Responsibility |
+| --- | --- |
+| `app` | Phone preview, permissions and Recenter button; Android Auto entry package |
+| `automotive` | Separate Android Automotive OS package, reusing the shared renderer |
+| `car_common` | Car templates, MapLibre rendering, style and location helpers |
+| `car_common/src/main/assets/styles/gta-inspired.json` | Shared Style Specification v8 JSON; colors, roads, buildings and labels |
+| `GameMapStyle.kt` | One asset URI and initial camera for all map views |
+| `GameMapLocation.kt` | Permission-aware MapLibre location activation and camera follow |
+| `MyCarAppService.kt` | Host validation and foreground location notification |
+| `CarMapRenderer.kt` / `CarMapContainer.kt` | VirtualDisplay + Presentation, surface and MapView lifecycle |
 
-Furthermore, we have a class called `CarMapRenderer`, which will render the Map on the provided Surface.
-```kotlin
-//Make sure to get the Surface by registering as SurfaceCallback
-override fun onCreate(owner: LifecycleOwner) {
-    super.onCreate(owner)
-    try {
-        carContext.appManager.setSurfaceCallback(this) //Make sure we get the Surface from Android Auto
-    } catch (e: Exception) {
-        Log.e(LOG_TAG, "Could not set surface callback", e)
-        return
-    }
-}
+The car map uses the sample's **VirtualDisplay + Presentation** pipeline. It does
+not use the old bitmap-copy loop described in earlier upstream documentation.
+Surface replacement, session shutdown and MapView disposal release their owned
+resources; the MapView is not removed from an unrelated WindowManager.
 
-//In onSurfaceAvailable, we get the Surface onto which we need to draw the map
+## Maps and location
 
-    override fun onSurfaceAvailable(surfaceContainer: SurfaceContainer) {
-        Log.v(LOG_TAG, "CarMapRenderer.onSurfaceAvailable")
-        this.surfaceContainer = surfaceContainer
-        mapContainer.setSurfaceSize(surfaceContainer.width, surfaceContainer.height)
+The original style uses [OpenFreeMap](https://openfreemap.org/quick_start/)
+OpenMapTiles-compatible vector tiles. No API key is required. Tiles and fonts are
+online resources; the project does not bundle or promise offline coverage.
+Attribution remains visible on the car display and available in MapLibre on the phone.
 
-        // // Start rendering the map on the Android Auto surface when any behavior changes are detected in the map.
-        mapContainer.mapViewInstance?.apply {
-            addOnDidBecomeIdleListener { drawOnSurface() }
-            addOnWillStartRenderingFrameListener {
-                drawOnSurface()
-            }
-        }
-        runOnMainThread {
-            // Start drawing the map on the android auto surface
-            drawOnSurface()
-        }
-    }
+Location is activated only after permission and style loading. Approximate permission
+is accepted, but its accuracy may be insufficient for a useful driving view. The
+MapLibre engine supplies the position; the camera follows GPS course rather than
+the phone's compass. Panning lets you inspect the map; **Recenter** restores follow.
+No position is sent to an application backend or saved as a trip by this prototype.
+The tile provider receives map requests necessary to display the viewed area.
 
-//Using a canvas, draw the map
-private fun drawOnSurface() {
-    val mapView = mapContainer.mapViewInstance ?: return
-    val surface = surfaceContainer?.surface ?: return
-    val canvas = surface.lockHardwareCanvas()
-    drawMapOnCanvas(mapView, canvas)
-    surface.unlockCanvasAndPost(canvas)
-}
+On the car, the existing CarAppService runs as a location foreground service while
+the map session is visible. If a host or Android version rejects that transition,
+Recenter asks you to open the phone app and retry. This still needs validation on
+real hosts, including with the phone screen off. The phone preview alone stops
+location updates when its MapView stops.
 
-//The actual drawing of the map
-private fun drawMapOnCanvas(mapView: MapView, canvas: Canvas) {
-    val mapViewTextureView = mapView.takeIf { it.childCount > 0 }?.getChildAt(0) as? TextureView
-    mapViewTextureView?.bitmap?.let {
-        canvas.drawBitmap(it, 0f, 0f, null)
-    }
-}
+## Validation status
 
-```
+Static JSON/XML/TOML and diff checks were performed for this implementation.
+The Android build was attempted but stopped before compilation because this editing
+environment cannot download Gradle and has no Android SDK. No APK, emulator, DHU,
+real-device GPS, rendering or smoothness result is claimed. Run the commands and
+manual scenarios in [STEP_1.md](docs/STEP_1.md) before treating the milestone as verified.
+The existing example unit tests are not a substitute for those scenarios.
 
-Other MapTiles / Style
-----------------------
+## Credits and license
 
-You can fix this by setting your own Style.
-Set this in the following places:
-
-Set your own Style in: `CarMapContainer.kt` (car_common);
-```kotlin
-getMapAsync {
-    mapViewInstance = this
-    mapLibreMapInstance = it
-    it.setStyle(
-        //TODO: Set your own style here
-        Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")
-    )
-}
-```
-And in `MainActivity` (app);
-```kotlin
-private fun initMap(map: MapLibreMap) {
-    try {
-        map.setStyle(
-            //TODO: Set your own style here!
-            Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")
-        )
-    } catch (e: Exception) {
-        Log.e("MapLibreCar", "Error setting local style", e)
-    }
-}
-```
-
-Main MapLibre website
----------------------
-https://maplibre.org/
-
-Discussing
-----------
-This project can be discussed on the OSM-US Slack, in channel #maplibre-android, invite link: https://slack.openstreetmap.us/
-
-Contributing
-------------
-We welcome contributions to this project. Please read the [Contributing Guidelines](CONTRIBUTING.md) for more information.
-
-License
--------
-[MIT](LICENSE)
-
-Contributor
---------
-[Flitsmeister](https://flitsmeister.nl)
-
-[MapLibre](https://maplibre.org)
-
-<a href="https://maps.vietmap.vn">
-<img src="https://bizweb.dktcdn.net/100/415/690/themes/804206/assets/logo.png?1731986518084" alt="VietMap" width="100"/>
-</a>
-
-Copyright (c) 2025 MapLibre contributors
+Code: [MIT](LICENSE), retaining the upstream MapLibre contributors' license.
+Upstream sample contributors include Flitsmeister, MapLibre and VietMap.
+Map data: OpenStreetMap contributors; tiles: OpenFreeMap / OpenMapTiles.
+The visual style and arrow in this fork are original assets; no GTA game files or
+logos are included. This project is not affiliated with Rockstar Games.
