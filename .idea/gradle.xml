@@ -13,10 +13,8 @@
             <option value="$PROJECT_DIR$/app" />
             <option value="$PROJECT_DIR$/automotive" />
             <option value="$PROJECT_DIR$/car_common" />
-            <option value="$PROJECT_DIR$/common" />
           </set>
         </option>
-        <option name="resolveExternalAnnotations" value="false" />
       </GradleProjectSettings>
     </option>
   </component>

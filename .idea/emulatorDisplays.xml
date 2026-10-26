@@ -3,26 +3,11 @@
   <component name="EmulatorDisplays">
     <option name="displayStateByAvdFolder">
       <map>
-        <entry key="$USER_HOME$/.android/avd/Automotive_Distant_Display_with_Google_Play_API_33.avd">
+        <entry key="$PROJECT_DIR$/../.android/avd/Automotive_Distant_Display_with_Google_Play_API_33.avd">
           <value>
             <MultiDisplayState>
               <option name="displayDescriptors">
-                <list>
-                  <DisplayDescriptor>
-                    <option name="height" value="1080" />
-                    <option name="width" value="600" />
-                  </DisplayDescriptor>
-                  <DisplayDescriptor>
-                    <option name="displayId" value="6" />
-                    <option name="height" value="600" />
-                    <option name="width" value="400" />
-                  </DisplayDescriptor>
-                  <DisplayDescriptor>
-                    <option name="displayId" value="7" />
-                    <option name="height" value="600" />
-                    <option name="width" value="3000" />
-                  </DisplayDescriptor>
-                </list>
+                <list />
               </option>
               <option name="panelState">
                 <PanelState>
@@ -53,6 +38,38 @@
                       <option name="secondComponent">
                         <PanelState>
                           <option name="displayId" value="7" />
+                        </PanelState>
+                      </option>
+                    </SplitPanelState>
+                  </option>
+                </PanelState>
+              </option>
+            </MultiDisplayState>
+          </value>
+        </entry>
+        <entry key="C:\Users\Francesco\.android\avd\Automotive_Ultrawide.avd">
+          <value>
+            <MultiDisplayState>
+              <option name="displayDescriptors">
+                <list>
+                  <display size="4004x1420" />
+                  <display displayId="6" size="528x792" />
+                </list>
+              </option>
+              <option name="panelState">
+                <PanelState>
+                  <option name="splitPanel">
+                    <SplitPanelState>
+                      <option name="proportion" value="0.6572934985160828" />
+                      <option name="splitType" value="VERTICAL" />
+                      <option name="firstComponent">
+                        <PanelState>
+                          <option name="displayId" value="0" />
+                        </PanelState>
+                      </option>
+                      <option name="secondComponent">
+                        <PanelState>
+                          <option name="displayId" value="6" />
                         </PanelState>
                       </option>
                     </SplitPanelState>
