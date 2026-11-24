@@ -23,5 +23,4 @@ dependencyResolutionManagement {
 rootProject.name = "MapLibreCar"
 include(":app")
 include(":automotive")
-include(":common")
 include(":car_common")
