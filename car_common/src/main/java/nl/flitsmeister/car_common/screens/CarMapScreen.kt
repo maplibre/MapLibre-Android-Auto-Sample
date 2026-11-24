@@ -22,6 +22,13 @@ class CarMapScreen(
     private val carMapRenderer: CarMapRenderer
 ) : Screen(carContext) {
 
+    override fun onResume() {
+        super.onResume()
+        // the location permission might have been granted while the
+        // permission screen was on top of this one
+        carMapRenderer.refreshLocationComponent()
+    }
+
     override fun onGetTemplate(): Template {
         val templateBuilder = NavigationTemplate.Builder()
         templateBuilder.apply {
