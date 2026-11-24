@@ -26,7 +26,7 @@ How is the code structured?
 ---------------------------
 The map can be drawn on Android Auto, and Android Automotive. A lot of code (most of it), can be shared between the two.
 Therefore, this bulk of the code is in a shared module, called `car_common`. This is used by the `app` (Smartphone app, uses Android Auto) and the `automotive` module.
-The `automotive` module actually has no code at all, just some config and resources. Everything it uses comes from the `car_common` module.
+The `automotive` module contains little code of its own, just some config and resources. Everything the car app uses comes from the `car_common` module; the only exceptions are the plain activities that render a map outside of the car app templates.
 
 ```mermaid
 flowchart TD
@@ -142,6 +142,40 @@ private fun initMap(map: MapLibreMap) {
     }
 }
 ```
+
+Rendering outside of the car app templates
+------------------------------------------
+The car app templates cannot reach every display of a car. On Android Automotive,
+apps render on the instrument cluster by launching a plain activity on that
+display. The `automotive` module ships two activities that render a `MapView`
+directly, next to the regular car app:
+
+- `FullscreenMapActivity`: a fullscreen map with zoom and recenter controls.
+- `ClusterMapActivity`: a lean map for the cluster, with a tilted camera
+  tracking the vehicle.
+
+They share `BaseMapActivity`, which also feeds the location puck from the raw
+`LocationManager` instead of the default location engine, so it works on
+emulators that do not ship one.
+
+Both activities have no intent filter; start them by component name, optionally
+targeting a display. On Android Automotive the foreground user is a secondary
+user, so pass `--user current` or the app launches for the wrong user and never
+appears:
+
+```bash
+# FullscreenMapActivity on the main display
+adb shell am start --user current \
+    -n nl.flitsmeister.maplibrecar.automotive/.FullscreenMapActivity
+
+# ClusterMapActivity on the instrument cluster (display 2 here; list displays
+# with `adb shell dumpsys display | grep mDisplayId`)
+adb shell am start --user current --display 2 \
+    -n nl.flitsmeister.maplibrecar.automotive/.ClusterMapActivity
+```
+
+From code, use `ActivityOptions.makeBasic().setLaunchDisplayId(displayId)` to
+launch on a specific display.
 
 Main MapLibre website
 ---------------------
