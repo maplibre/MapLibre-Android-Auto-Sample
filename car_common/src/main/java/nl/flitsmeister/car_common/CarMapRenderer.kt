@@ -62,6 +62,10 @@ class CarMapRenderer(
         }
     }
 
+    fun refreshLocationComponent() {
+        mapContainer.refreshLocationComponent()
+    }
+
     override fun onSurfaceAvailable(surfaceContainer: SurfaceContainer) {
         Log.v(LOG_TAG, "CarMapRenderer.onSurfaceAvailable")
         this.surfaceContainer = surfaceContainer

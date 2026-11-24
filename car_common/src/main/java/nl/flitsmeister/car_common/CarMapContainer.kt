@@ -1,7 +1,9 @@
 package nl.flitsmeister.car_common
 
+import android.Manifest
 import android.animation.Animator
 import android.animation.ValueAnimator
+import android.content.pm.PackageManager
 import android.graphics.Paint
 import android.graphics.PointF
 import android.view.Gravity
@@ -12,9 +14,13 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.annotation.MainThread
 import androidx.car.app.CarContext
+import androidx.core.content.ContextCompat
 import nl.flitsmeister.car_common.extentions.windowManager
 import org.maplibre.android.MapLibre
 import org.maplibre.android.constants.MapLibreConstants
+import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.modes.CameraMode
+import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
@@ -112,7 +118,9 @@ class CarMapContainer(
                 it.setStyle(
                     //TODO: Set your own style here
                     Style.Builder().fromUri("https://demotiles.maplibre.org/style.json")
-                )
+                ) { style ->
+                    enableLocationComponent(it, style)
+                }
             }
         }
         mapViewInstance = mapView
@@ -138,6 +146,38 @@ class CarMapContainer(
         )
 
         return frameLayout
+    }
+
+    /**
+     * Enable the location component if the map is loaded and the location
+     * permission is granted.
+     */
+    @MainThread
+    fun refreshLocationComponent() {
+        val map = mapLibreMapInstance ?: return
+        val style = map.style ?: return
+        enableLocationComponent(map, style)
+    }
+
+    @Suppress("MissingPermission")
+    private fun enableLocationComponent(map: MapLibreMap, style: Style) {
+        if (ContextCompat.checkSelfPermission(carContext, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val locationComponent = map.locationComponent
+        if (locationComponent.isLocationComponentEnabled) {
+            return
+        }
+        locationComponent.activateLocationComponent(
+            LocationComponentActivationOptions.builder(carContext, style)
+                .useDefaultLocationEngine(true)
+                .build()
+        )
+        locationComponent.isLocationComponentEnabled = true
+        locationComponent.cameraMode = CameraMode.TRACKING
+        locationComponent.renderMode = RenderMode.GPS
     }
 
     @MainThread
